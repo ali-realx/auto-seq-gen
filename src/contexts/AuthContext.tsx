@@ -6,8 +6,8 @@ import { useNavigate } from "react-router-dom";
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, nama: string, lokasi: string, departemen: string) => Promise<{ error: any }>;
+  signIn: (username: string, password: string) => Promise<{ error: any }>;
+  signUp: (username: string, password: string, nama: string, lokasi: string, departemen: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   loading: boolean;
 }
@@ -71,7 +71,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (username: string, password: string) => {
+    // Convert username to email format for Supabase
+    const email = `${username}@enumbering.local`;
+    
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -84,7 +87,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, nama: string, lokasi: string, departemen: string) => {
+  const signUp = async (username: string, password: string, nama: string, lokasi: string, departemen: string) => {
+    // Convert username to email format for Supabase
+    const email = `${username}@enumbering.local`;
     const redirectUrl = `${window.location.origin}/dashboard`;
     
     const { error } = await supabase.auth.signUp({
@@ -93,6 +98,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       options: {
         emailRedirectTo: redirectUrl,
         data: {
+          username,
           nama,
           lokasi,
           departemen,
