@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    container_name: auto-seq-gen
+    ports:
+      - "6890:6890"
+    environment:
+      - PORT=6890
+    restart: unless-stopped
+    env_file:
+      - .env
