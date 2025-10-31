@@ -1,1 +1,7 @@
 project_id = "otugaoutqujdsttqkdrp"
+
+[functions.generate-number]
+
+[functions.create-user]
+
+[functions.delete-user]
