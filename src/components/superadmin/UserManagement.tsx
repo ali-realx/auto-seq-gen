@@ -30,6 +30,9 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const { toast } = useToast();
 
+  // ref for hidden file input
+  let fileInputRef: HTMLInputElement | null = null;
+
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -143,16 +146,88 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     fetchUsers();
   };
 
-  const resetForm = () => {
-    setFormData({
-      username: "",
-      password: "",
-      nama: "",
-      uid: "",
-      departemen: "",
-      lokasi: "",
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // dynamic import to avoid bundling if not installed
+    const Papa = (await import("papaparse")).default;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results: any) => {
+        const rows = (results.data || []) as Array<Record<string, string>>;
+        if (!rows.length) {
+          toast({ variant: "destructive", title: "Error", description: "File kosong atau format salah" });
+          return;
+        }
+
+        // basic header validation
+        const required = ["username", "password", "nama", "uid", "departemen", "lokasi"];
+        const headers = Object.keys(rows[0]);
+        const missing = required.filter((h) => !headers.includes(h));
+        if (missing.length) {
+          toast({
+            variant: "destructive",
+            title: "Format CSV tidak sesuai",
+            description: `Kolom hilang: ${missing.join(", ")}`,
+          });
+          return;
+        }
+
+        // map rows to expected payload
+        const users = rows.map((r) => ({
+          username: String(r.username || "").trim(),
+          password: String(r.password || "").trim(),
+          nama: String(r.nama || "").trim(),
+          uid: String(r.uid || "").trim(),
+          departemen: String(r.departemen || "").trim(),
+          lokasi: String(r.lokasi || "").trim(),
+        }));
+
+        toast({ title: "Mengimpor...", description: `Memproses ${users.length} user` });
+
+        try {
+          // Prefer single batch edge function if tersedia
+          const { error: batchError } = await supabase.functions.invoke("create-users-batch", {
+            body: { users },
+          } as any);
+
+          if (batchError) {
+            // fallback: invoke create-user per row
+            const results = [];
+            for (const u of users) {
+              const { error } = await supabase.functions.invoke("create-user", { body: u } as any);
+              results.push({ user: u.username, ok: !error, error: error?.message });
+            }
+
+            const failed = results.filter((r) => !r.ok);
+            if (failed.length) {
+              toast({
+                variant: "destructive",
+                title: "Sebagian gagal",
+                description: `${failed.length} dari ${users.length} user gagal dibuat`,
+              });
+            } else {
+              toast({ title: "Sukses", description: "Semua user berhasil dibuat" });
+            }
+          } else {
+            toast({ title: "Sukses", description: "User berhasil diimpor (batch)" });
+          }
+
+          fetchUsers();
+        } catch (err: any) {
+          toast({ variant: "destructive", title: "Error", description: String(err.message || err) });
+        } finally {
+          // reset file input
+          if (fileInputRef) fileInputRef.value = "";
+        }
+      },
+      error: (err) => {
+        toast({ variant: "destructive", title: "Parse Error", description: String(err) });
+      },
     });
-    setEditingUser(null);
   };
 
   const downloadTemplate = () => {
@@ -175,7 +250,19 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
             <Download className="h-4 w-4 mr-2" />
             Download Template
           </Button>
-          <Button variant="outline" size="sm">
+          {/* hidden file input + button */}
+          <input
+            ref={(el) => (fileInputRef = el)}
+            className="hidden"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFileChange}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef && fileInputRef.click()}
+          >
             <Upload className="h-4 w-4 mr-2" />
             Import Users
           </Button>

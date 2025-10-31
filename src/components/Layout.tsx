@@ -1,82 +1,92 @@
-import { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { LogOut, RefreshCw, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LayoutProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
-const Layout = ({ children }: LayoutProps) => {
+export default function Layout({ children }: LayoutProps) {
   const { signOut, user } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
-  const handleRefresh = () => {
-    // Clear cache and reload
-    caches.keys().then((names) => {
-      names.forEach((name) => {
-        caches.delete(name);
-      });
-    });
-    window.location.reload();
-    toast({
-      title: "Cache dibersihkan",
-      description: "Aplikasi telah diperbarui",
-    });
-  };
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  // Check if user is superadmin
-  const isSuperAdmin = user?.email === "superadmin@enumber.app";
+  useEffect(() => {
+    if (!user) {
+      setIsSuperAdmin(false);
+      return;
+    }
+    let mounted = true;
+
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "superadmin")
+          .single();
+
+        if (mounted) setIsSuperAdmin(Boolean(data));
+      } catch {
+        if (mounted) setIsSuperAdmin(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-primary">E-Numbering</h1>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {isSuperAdmin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate("/superadmin")}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Super Admin
-                </Button>
-              )}
+    <div className="min-h-screen flex flex-col">
+      <header className="border-b">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1
+              className="text-2xl font-bold text-primary cursor-pointer"
+              onClick={() => navigate("/dashboard")}
+            >
+              E-Numbering
+            </h1>
+            <p className="text-sm text-muted-foreground hidden md:block">
+              Sistem pengelolaan nomor dokumen
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isSuperAdmin && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRefresh}
+                onClick={() => navigate("/superadmin")}
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Update
+                Super Admin
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={signOut}
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
+            )}
+
+            {/* Profile button kembali ditambahkan */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/profile")}
+            >
+              Profile
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={signOut}>
+              Logout
+            </Button>
           </div>
         </div>
       </header>
-      
-      <main className="container mx-auto px-4 py-6">
+
+      <main className="flex-1 max-w-7xl mx-auto px-4 py-6 w-full">
         {children}
       </main>
     </div>
   );
-};
-
-export default Layout;
+}
