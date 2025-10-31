@@ -7,29 +7,62 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { UserManagement } from "@/components/superadmin/UserManagement";
+import { MasterDataManagement } from "@/components/superadmin/MasterDataManagement";
 
 const SuperAdmin = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [locations, setLocations] = useState<Array<{ id: string; nama: string }>>([]);
+  const [departments, setDepartments] = useState<Array<{ id: string; nama: string }>>([]);
 
   useEffect(() => {
     if (!loading && !user) {
       navigate("/auth");
     }
-    
-    // Check if user is superadmin
-    if (user && user.email !== "superadmin@enumber.app") {
+  }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (user) {
+      checkSuperAdminRole();
+      fetchMasterData();
+    }
+  }, [user]);
+
+  const checkSuperAdminRole = async () => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user?.id)
+      .eq("role", "superadmin")
+      .single();
+
+    if (!data) {
       toast({
         variant: "destructive",
         title: "Akses ditolak",
         description: "Anda tidak memiliki akses ke halaman ini",
       });
       navigate("/dashboard");
+    } else {
+      setIsSuperAdmin(true);
     }
-  }, [user, loading, navigate]);
+  };
 
-  if (loading) {
+  const fetchMasterData = async () => {
+    const [locsResult, deptsResult] = await Promise.all([
+      supabase.from("locations").select("id, nama").order("nama"),
+      supabase.from("departments").select("id, nama").order("nama"),
+    ]);
+
+    if (locsResult.data) setLocations(locsResult.data);
+    if (deptsResult.data) setDepartments(deptsResult.data);
+  };
+
+  if (loading || !isSuperAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading...</p>
@@ -66,28 +99,31 @@ const SuperAdmin = () => {
               </TabsList>
               
               <TabsContent value="users" className="space-y-4">
-                <div className="text-center py-12 text-muted-foreground">
-                  <p>Fitur manajemen users akan segera tersedia</p>
-                  <p className="text-sm mt-2">Untuk saat ini, user dapat mendaftar sendiri melalui halaman register</p>
-                </div>
+                <UserManagement locations={locations} departments={departments} />
               </TabsContent>
               
               <TabsContent value="doctypes" className="space-y-4">
-                <div className="text-center py-12 text-muted-foreground">
-                  <p>Fitur manajemen jenis dokumen akan segera tersedia</p>
-                </div>
+                <MasterDataManagement 
+                  title="Jenis Dokumen" 
+                  tableName="document_types" 
+                  onDataChange={fetchMasterData}
+                />
               </TabsContent>
               
               <TabsContent value="locations" className="space-y-4">
-                <div className="text-center py-12 text-muted-foreground">
-                  <p>Fitur manajemen lokasi akan segera tersedia</p>
-                </div>
+                <MasterDataManagement 
+                  title="Lokasi" 
+                  tableName="locations" 
+                  onDataChange={fetchMasterData}
+                />
               </TabsContent>
               
               <TabsContent value="departments" className="space-y-4">
-                <div className="text-center py-12 text-muted-foreground">
-                  <p>Fitur manajemen departemen akan segera tersedia</p>
-                </div>
+                <MasterDataManagement 
+                  title="Departemen" 
+                  tableName="departments" 
+                  onDataChange={fetchMasterData}
+                />
               </TabsContent>
               
               <TabsContent value="settings" className="space-y-4">

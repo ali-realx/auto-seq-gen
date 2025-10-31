@@ -8,6 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Document {
   id: string;
@@ -20,11 +23,17 @@ interface Document {
   created_at: string;
 }
 
+type ViewMode = "own" | "department" | "all";
+
 const Dashboard = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>("own");
+  const [jenisFilter, setJenisFilter] = useState<string>("all");
+  const [documentTypes, setDocumentTypes] = useState<Array<{ id: string; nama: string }>>([]);
+  const [userProfile, setUserProfile] = useState<{ departemen: string } | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -34,17 +43,59 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user) {
-      fetchDocuments();
+      fetchUserProfile();
+      fetchDocumentTypes();
     }
   }, [user]);
 
+  useEffect(() => {
+    if (user && userProfile) {
+      fetchDocuments();
+    }
+  }, [user, userProfile, viewMode, jenisFilter]);
+
+  const fetchUserProfile = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("departemen")
+      .eq("id", user?.id)
+      .single();
+    
+    if (data) {
+      setUserProfile(data);
+    }
+  };
+
+  const fetchDocumentTypes = async () => {
+    const { data } = await supabase
+      .from("document_types")
+      .select("id, nama")
+      .order("nama");
+    
+    if (data) {
+      setDocumentTypes(data);
+    }
+  };
+
   const fetchDocuments = async () => {
     setIsLoadingDocs(true);
-    const { data, error } = await supabase
-      .from("documents")
-      .select("*")
-      .eq("user_id", user?.id)
-      .order("created_at", { ascending: false });
+    
+    let query = supabase.from("documents").select("*");
+
+    // Apply view mode filter
+    if (viewMode === "own") {
+      query = query.eq("user_id", user?.id);
+    } else if (viewMode === "department" && userProfile) {
+      query = query.eq("departemen", userProfile.departemen);
+    }
+    // "all" mode doesn't add any filter, RLS handles it
+
+    // Apply jenis filter
+    if (jenisFilter !== "all") {
+      query = query.eq("jenis_surat", jenisFilter);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     if (data && !error) {
       setDocuments(data);
@@ -66,13 +117,52 @@ const Dashboard = () => {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold text-foreground">Dashboard</h2>
-            <p className="text-muted-foreground">Daftar nomor dokumen Anda</p>
+            <p className="text-muted-foreground">Daftar nomor dokumen</p>
           </div>
           <Button onClick={() => navigate("/create-number")} size="lg">
             <Plus className="h-5 w-5 mr-2" />
             Buat Nomor Baru
           </Button>
         </div>
+
+        <Card className="p-6">
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex-1">
+              <Label className="text-sm font-semibold mb-3 block">Tampilkan</Label>
+              <RadioGroup value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="own" id="own" />
+                  <Label htmlFor="own" className="cursor-pointer">Nomor Saya Sendiri</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="department" id="department" />
+                  <Label htmlFor="department" className="cursor-pointer">Nomor Se-Departemen</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="all" id="all" />
+                  <Label htmlFor="all" className="cursor-pointer">Semua Nomor</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="flex-1">
+              <Label className="text-sm font-semibold mb-3 block">Filter Jenis Surat</Label>
+              <Select value={jenisFilter} onValueChange={setJenisFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih jenis surat" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Jenis</SelectItem>
+                  {documentTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.nama}>
+                      {type.nama}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </Card>
 
         <Card>
           <div className="overflow-x-auto">
@@ -82,7 +172,7 @@ const Dashboard = () => {
                   <TableHead className="font-semibold">Nama</TableHead>
                   <TableHead className="font-semibold">Nomor Surat</TableHead>
                   <TableHead className="font-semibold">Jenis Surat</TableHead>
-                  <TableHead className="font-semibold">Deskripsi</TableHead>
+                  {viewMode !== "all" && <TableHead className="font-semibold">Deskripsi</TableHead>}
                   <TableHead className="font-semibold">Lokasi</TableHead>
                   <TableHead className="font-semibold">Departemen</TableHead>
                   <TableHead className="font-semibold">Tanggal</TableHead>
@@ -91,13 +181,13 @@ const Dashboard = () => {
               <TableBody>
                 {isLoadingDocs ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={viewMode !== "all" ? 7 : 6} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : documents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={viewMode !== "all" ? 7 : 6} className="text-center py-8 text-muted-foreground">
                       Belum ada nomor dokumen. Klik "Buat Nomor Baru" untuk memulai.
                     </TableCell>
                   </TableRow>
@@ -109,7 +199,7 @@ const Dashboard = () => {
                         {doc.nomor_surat}
                       </TableCell>
                       <TableCell>{doc.jenis_surat}</TableCell>
-                      <TableCell className="max-w-xs truncate">{doc.deskripsi}</TableCell>
+                      {viewMode !== "all" && <TableCell className="max-w-xs truncate">{doc.deskripsi}</TableCell>}
                       <TableCell>{doc.lokasi}</TableCell>
                       <TableCell>{doc.departemen}</TableCell>
                       <TableCell>
