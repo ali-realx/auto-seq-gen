@@ -58,28 +58,35 @@ export default function Layout({ children }: LayoutProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            {isSuperAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate("/superadmin")}
-              >
-                Super Admin
+            {user ? (
+              <>
+                {isSuperAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/superadmin")}
+                  >
+                    Super Admin
+                  </Button>
+                )}
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/profile")}
+                >
+                  Profile
+                </Button>
+
+                <Button variant="outline" size="sm" onClick={signOut}>
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <Button variant="default" size="sm" onClick={() => navigate("/auth")}>
+                Login
               </Button>
             )}
-
-            {/* Profile button kembali ditambahkan */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/profile")}
-            >
-              Profile
-            </Button>
-
-            <Button variant="outline" size="sm" onClick={signOut}>
-              Logout
-            </Button>
           </div>
         </div>
       </header>

@@ -35,20 +35,29 @@ const CreateNumber = () => {
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDocType, setSelectedDocType] = useState("");
   const [description, setDescription] = useState("");
+  const [currentUserProfile, setCurrentUserProfile] = useState<Profile | null>(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [generatedNumber, setGeneratedNumber] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
-      navigate("/auth");
-    }
-  }, [user, loading, navigate]);
-
-  useEffect(() => {
     fetchMasterData();
-  }, []);
+    if (user) {
+      fetchCurrentUserProfile();
+    }
+  }, [user]);
+
+  const fetchCurrentUserProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    if (data) {
+      setCurrentUserProfile(data);
+      setSelectedLocation(data.lokasi);
+      setSelectedName(data.nama);
+      setSelectedDepartment(data.departemen);
+    }
+  };
 
   useEffect(() => {
     if (selectedLocation) {
@@ -127,11 +136,16 @@ const CreateNumber = () => {
     }
   };
 
-  if (loading) {
+  if (loading || isGenerating) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <p className="text-muted-foreground">{isGenerating ? "Generating number..." : "Loading..."}</p>
+          </div>
+        </div>
+      </Layout>
     );
   }
 
@@ -156,9 +170,13 @@ const CreateNumber = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="location">Lokasi</Label>
-              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <Select 
+                value={selectedLocation} 
+                onValueChange={setSelectedLocation}
+                disabled={user && currentUserProfile !== null}
+              >
                 <SelectTrigger id="location">
-                  <SelectValue placeholder="Pilih lokasi" />
+                  <SelectValue placeholder={user ? "Auto-selected" : "Pilih lokasi"} />
                 </SelectTrigger>
                 <SelectContent>
                   {locations.map((loc) => (
@@ -175,10 +193,10 @@ const CreateNumber = () => {
               <Select 
                 value={selectedName} 
                 onValueChange={setSelectedName}
-                disabled={!selectedLocation}
+                disabled={!selectedLocation || (user && currentUserProfile !== null)}
               >
                 <SelectTrigger id="name">
-                  <SelectValue placeholder="Pilih nama" />
+                  <SelectValue placeholder={user ? "Auto-selected" : "Pilih nama"} />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredProfiles.map((profile) => (

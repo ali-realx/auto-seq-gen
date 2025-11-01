@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -30,10 +31,13 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("own");
+  const [viewMode, setViewMode] = useState<"own" | "department" | "all">("all");
   const [jenisFilter, setJenisFilter] = useState<string>("all");
-  const [documentTypes, setDocumentTypes] = useState<Array<{ id: string; nama: string }>>([]);
-  const [userProfile, setUserProfile] = useState<{ departemen: string } | null>(null);
+  const [departemenFilter, setDepartemenFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [documentTypes, setDocumentTypes] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -45,6 +49,7 @@ const Dashboard = () => {
     if (user) {
       fetchUserProfile();
       fetchDocumentTypes();
+      fetchDepartments();
     }
   }, [user]);
 
@@ -52,7 +57,7 @@ const Dashboard = () => {
     if (user && userProfile) {
       fetchDocuments();
     }
-  }, [user, userProfile, viewMode, jenisFilter]);
+  }, [user, userProfile, viewMode, jenisFilter, departemenFilter]);
 
   const fetchUserProfile = async () => {
     const { data } = await supabase
@@ -77,6 +82,17 @@ const Dashboard = () => {
     }
   };
 
+  const fetchDepartments = async () => {
+    const { data } = await supabase
+      .from("departments")
+      .select("id, nama")
+      .order("nama");
+    
+    if (data) {
+      setDepartments(data);
+    }
+  };
+
   const fetchDocuments = async () => {
     setIsLoadingDocs(true);
     
@@ -95,6 +111,10 @@ const Dashboard = () => {
       query = query.eq("jenis_surat", jenisFilter);
     }
 
+    if (departemenFilter !== "all") {
+      query = query.eq("departemen", departemenFilter);
+    }
+
     const { data, error } = await query.order("created_at", { ascending: false });
 
     if (data && !error) {
@@ -103,11 +123,27 @@ const Dashboard = () => {
     setIsLoadingDocs(false);
   };
 
-  if (loading) {
+  const filteredDocuments = documents.filter((doc) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
+      doc.nama.toLowerCase().includes(query) ||
+      doc.jenis_surat.toLowerCase().includes(query) ||
+      doc.departemen.toLowerCase().includes(query) ||
+      (doc.deskripsi && doc.deskripsi.toLowerCase().includes(query))
+    );
+  });
+
+  if (loading || isLoadingDocs) {
+    return (
+      <Layout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </Layout>
     );
   }
 
@@ -126,41 +162,73 @@ const Dashboard = () => {
         </div>
 
         <Card className="p-6">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex-1">
-              <Label className="text-sm font-semibold mb-3 block">Tampilkan</Label>
-              <RadioGroup value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="own" id="own" />
-                  <Label htmlFor="own" className="cursor-pointer">Nomor Saya Sendiri</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="department" id="department" />
-                  <Label htmlFor="department" className="cursor-pointer">Nomor Se-Departemen</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="all" id="all" />
-                  <Label htmlFor="all" className="cursor-pointer">Semua Nomor</Label>
-                </div>
-              </RadioGroup>
+          <div className="space-y-4">
+            {user && (
+              <div>
+                <Label className="text-sm font-semibold mb-3 block">Tampilkan</Label>
+                <RadioGroup value={viewMode} onValueChange={(value) => setViewMode(value as "own" | "department" | "all")}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="own" id="own" />
+                    <Label htmlFor="own" className="cursor-pointer">Nomor Saya</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="department" id="department" />
+                    <Label htmlFor="department" className="cursor-pointer">Nomor Departemen</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="all" id="all" />
+                    <Label htmlFor="all" className="cursor-pointer">Semua Nomor</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-semibold mb-3 block">Filter Jenis Dokumen</Label>
+                <Select value={jenisFilter} onValueChange={setJenisFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih jenis dokumen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Jenis</SelectItem>
+                    {documentTypes.map((type) => (
+                      <SelectItem key={type.id} value={type.nama}>
+                        {type.nama}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm font-semibold mb-3 block">Filter Departemen</Label>
+                <Select value={departemenFilter} onValueChange={setDepartemenFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih departemen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Departemen</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.nama}>
+                        {dept.nama}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="flex-1">
-              <Label className="text-sm font-semibold mb-3 block">Filter Jenis Surat</Label>
-              <Select value={jenisFilter} onValueChange={setJenisFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih jenis surat" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Jenis</SelectItem>
-                  {documentTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.nama}>
-                      {type.nama}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {(viewMode === "own" || viewMode === "department") && (
+              <div>
+                <Label className="text-sm font-semibold mb-3 block">Cari</Label>
+                <Input
+                  placeholder="Cari berdasarkan nama, jenis, departemen, atau deskripsi..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
           </div>
         </Card>
 
@@ -185,14 +253,14 @@ const Dashboard = () => {
                       Loading...
                     </TableCell>
                   </TableRow>
-                ) : documents.length === 0 ? (
+                ) : filteredDocuments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={viewMode !== "all" ? 7 : 6} className="text-center py-8 text-muted-foreground">
                       Belum ada nomor dokumen. Klik "Buat Nomor Baru" untuk memulai.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  documents.map((doc) => (
+                  filteredDocuments.map((doc) => (
                     <TableRow key={doc.id} className="h-12">
                       <TableCell>{doc.nama}</TableCell>
                       <TableCell className="font-mono font-semibold text-primary">

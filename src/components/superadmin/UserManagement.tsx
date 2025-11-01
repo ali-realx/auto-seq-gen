@@ -110,6 +110,18 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     fetchUsers();
   };
 
+  const resetForm = () => {
+    setFormData({
+      username: "",
+      password: "",
+      nama: "",
+      uid: "",
+      departemen: "",
+      lokasi: "",
+    });
+    setEditingUser(null);
+  };
+
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setFormData({

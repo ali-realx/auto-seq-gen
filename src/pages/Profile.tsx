@@ -10,8 +10,10 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [profile, setProfile] = useState<{ nama?: string; departemen?: string; lokasi?: string } | null>(null);
   const [form, setForm] = useState({ nama: "", departemen: "", lokasi: "" });
+  const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
 
   useEffect(() => {
     if (!user) return;
@@ -40,6 +42,32 @@ export default function ProfilePage() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!user) return;
+    
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({ variant: "destructive", title: "Password tidak cocok", description: "Password baru dan konfirmasi tidak sama" });
+      return;
+    }
+    
+    if (passwordForm.newPassword.length < 6) {
+      toast({ variant: "destructive", title: "Password terlalu pendek", description: "Password minimal 6 karakter" });
+      return;
+    }
+    
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
+    setLoading(false);
+    
+    if (error) {
+      toast({ variant: "destructive", title: "Ubah password gagal", description: error.message });
+    } else {
+      toast({ title: "Password berhasil diubah" });
+      setPasswordForm({ newPassword: "", confirmPassword: "" });
+      setChangingPassword(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -59,12 +87,26 @@ export default function ProfilePage() {
             <p className="text-sm text-muted-foreground">Kelola data profil Anda</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setEditing((s) => !s)}>
-              {editing ? "Batal" : "Edit"}
+            <Button variant="ghost" size="sm" onClick={() => {
+              setEditing(false);
+              setChangingPassword((s) => !s);
+            }}>
+              {changingPassword ? "Batal" : "Ubah Password"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => {
+              setChangingPassword(false);
+              setEditing((s) => !s);
+            }}>
+              {editing ? "Batal" : "Edit Profil"}
             </Button>
             {editing && (
               <Button size="sm" onClick={handleSave} disabled={loading}>
                 Simpan
+              </Button>
+            )}
+            {changingPassword && (
+              <Button size="sm" onClick={handleChangePassword} disabled={loading}>
+                Simpan Password
               </Button>
             )}
           </div>
@@ -115,6 +157,30 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
+
+        {changingPassword && (
+          <div className="bg-white border rounded p-6 mt-6">
+            <h3 className="text-lg font-semibold mb-4">Ubah Password</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Password Baru</label>
+              <input
+                type="password"
+                className="w-full border rounded px-3 py-2"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm((f) => ({ ...f, newPassword: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Konfirmasi Password Baru</label>
+              <input
+                type="password"
+                className="w-full border rounded px-3 py-2"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
