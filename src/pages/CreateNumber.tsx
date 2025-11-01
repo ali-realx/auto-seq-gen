@@ -63,10 +63,15 @@ const CreateNumber = () => {
     if (selectedLocation) {
       const filtered = profiles.filter((p) => p.lokasi === selectedLocation);
       setFilteredProfiles(filtered);
-      setSelectedName("");
-      setSelectedDepartment("");
+      // Only reset if current selectedName doesn't belong to this location
+      if (!filtered.some((p) => p.nama === selectedName)) {
+        setSelectedName("");
+        setSelectedDepartment("");
+      }
+    } else {
+      setFilteredProfiles(profiles);
     }
-  }, [selectedLocation, profiles]);
+  }, [selectedLocation, profiles, selectedName]);
 
   useEffect(() => {
     if (selectedName) {

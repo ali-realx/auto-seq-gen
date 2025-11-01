@@ -39,24 +39,24 @@ const Dashboard = () => {
   const [departments, setDepartments] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
 
+  // Allow public access to dashboard; no redirect
+
   useEffect(() => {
-    if (!loading && !user) {
-      navigate("/auth");
-    }
-  }, [user, loading, navigate]);
+    // Load filters for everyone
+    fetchDocumentTypes();
+    fetchDepartments();
+  }, []);
 
   useEffect(() => {
     if (user) {
       fetchUserProfile();
-      fetchDocumentTypes();
-      fetchDepartments();
+    } else {
+      setUserProfile(null);
     }
   }, [user]);
 
   useEffect(() => {
-    if (user && userProfile) {
-      fetchDocuments();
-    }
+    fetchDocuments();
   }, [user, userProfile, viewMode, jenisFilter, departemenFilter]);
 
   const fetchUserProfile = async () => {
@@ -100,11 +100,15 @@ const Dashboard = () => {
 
     // Apply view mode filter
     if (viewMode === "own") {
-      query = query.eq("user_id", user?.id);
-    } else if (viewMode === "department" && userProfile) {
-      query = query.eq("departemen", userProfile.departemen);
+      if (user?.id) {
+        query = query.eq("user_id", user.id);
+      }
+    } else if (viewMode === "department") {
+      if (userProfile?.departemen) {
+        query = query.eq("departemen", userProfile.departemen);
+      }
     }
-    // "all" mode doesn't add any filter, RLS handles it
+    // "all" mode doesn't add any filter; backend policies handle access
 
     // Apply jenis filter
     if (jenisFilter !== "all") {
