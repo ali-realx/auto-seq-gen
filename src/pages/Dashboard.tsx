@@ -35,6 +35,7 @@ const Dashboard = () => {
   const [jenisFilter, setJenisFilter] = useState<string>("all");
   const [departemenFilter, setDepartemenFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchCategory, setSearchCategory] = useState<string>("all");
   const [documentTypes, setDocumentTypes] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -130,12 +131,23 @@ const Dashboard = () => {
   const filteredDocuments = documents.filter((doc) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    return (
-      doc.nama.toLowerCase().includes(query) ||
-      doc.jenis_surat.toLowerCase().includes(query) ||
-      doc.departemen.toLowerCase().includes(query) ||
-      (doc.deskripsi && doc.deskripsi.toLowerCase().includes(query))
-    );
+    
+    if (searchCategory === "all") {
+      return (
+        doc.nama.toLowerCase().includes(query) ||
+        doc.nomor_surat.toLowerCase().includes(query) ||
+        doc.lokasi.toLowerCase().includes(query) ||
+        doc.departemen.toLowerCase().includes(query)
+      );
+    } else if (searchCategory === "nama") {
+      return doc.nama.toLowerCase().includes(query);
+    } else if (searchCategory === "nomor") {
+      return doc.nomor_surat.toLowerCase().includes(query);
+    } else if (searchCategory === "lokasi") {
+      return doc.lokasi.toLowerCase().includes(query);
+    }
+    
+    return true;
   });
 
   if (loading || isLoadingDocs) {
@@ -223,16 +235,30 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {(viewMode === "own" || viewMode === "department") && (
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-1">
+                <Label className="text-sm font-semibold mb-3 block">Kategori Pencarian</Label>
+                <Select value={searchCategory} onValueChange={setSearchCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Kategori</SelectItem>
+                    <SelectItem value="nama">Nama</SelectItem>
+                    <SelectItem value="nomor">Nomor Surat</SelectItem>
+                    <SelectItem value="lokasi">Lokasi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-3">
                 <Label className="text-sm font-semibold mb-3 block">Cari</Label>
                 <Input
-                  placeholder="Cari berdasarkan nama, jenis, departemen, atau deskripsi..."
+                  placeholder="Cari berdasarkan kategori yang dipilih..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-            )}
+            </div>
           </div>
         </Card>
 
