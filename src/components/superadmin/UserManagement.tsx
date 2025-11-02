@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Plus, Download, Upload } from "lucide-react";
+import { Pencil, Trash2, Plus, Download, Upload, Search, Edit } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface User {
   id: string;
@@ -29,6 +30,17 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const { toast } = useToast();
+
+  // New state for filters and batch operations
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterLokasi, setFilterLokasi] = useState<string>("all");
+  const [filterDepartemen, setFilterDepartemen] = useState<string>("all");
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
+  const [batchFormData, setBatchFormData] = useState({
+    lokasi: "",
+    departemen: "",
+  });
 
   // ref for hidden file input
   let fileInputRef: HTMLInputElement | null = null;
@@ -253,11 +265,92 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     a.click();
   };
 
+  // Filter users based on search and filters
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch = user.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.uid?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesLokasi = filterLokasi === "all" || user.lokasi === filterLokasi;
+    const matchesDepartemen = filterDepartemen === "all" || user.departemen === filterDepartemen;
+    return matchesSearch && matchesLokasi && matchesDepartemen;
+  });
+
+  // Toggle individual user selection
+  const toggleUserSelection = (userId: string) => {
+    const newSelected = new Set(selectedUsers);
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId);
+    } else {
+      newSelected.add(userId);
+    }
+    setSelectedUsers(newSelected);
+  };
+
+  // Toggle all users selection
+  const toggleAllUsers = () => {
+    if (selectedUsers.size === filteredUsers.length) {
+      setSelectedUsers(new Set());
+    } else {
+      setSelectedUsers(new Set(filteredUsers.map(u => u.id)));
+    }
+  };
+
+  // Handle batch update
+  const handleBatchUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (selectedUsers.size === 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Pilih user terlebih dahulu",
+      });
+      return;
+    }
+
+    const updates: any = {};
+    if (batchFormData.lokasi) updates.lokasi = batchFormData.lokasi;
+    if (batchFormData.departemen) updates.departemen = batchFormData.departemen;
+
+    if (Object.keys(updates).length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Pilih minimal satu field untuk diupdate",
+      });
+      return;
+    }
+
+    try {
+      const promises = Array.from(selectedUsers).map(userId =>
+        supabase.from("profiles").update(updates).eq("id", userId)
+      );
+
+      await Promise.all(promises);
+
+      toast({
+        title: "Sukses",
+        description: `${selectedUsers.size} user berhasil diupdate`,
+      });
+
+      setIsBatchDialogOpen(false);
+      setBatchFormData({ lokasi: "", departemen: "" });
+      setSelectedUsers(new Set());
+      fetchUsers();
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Gagal mengupdate users",
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-4">
         <h3 className="text-lg font-semibold">Manajemen User</h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download className="h-4 w-4 mr-2" />
             Download Template
@@ -278,6 +371,64 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
             <Upload className="h-4 w-4 mr-2" />
             Import Users
           </Button>
+          {selectedUsers.size > 0 && (
+            <Dialog open={isBatchDialogOpen} onOpenChange={setIsBatchDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="secondary">
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit {selectedUsers.size} User
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Batch Edit {selectedUsers.size} User</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleBatchUpdate} className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Pilih field yang ingin diubah untuk {selectedUsers.size} user yang dipilih
+                  </p>
+                  <div>
+                    <Label htmlFor="batch-lokasi">Lokasi (opsional)</Label>
+                    <Select value={batchFormData.lokasi} onValueChange={(value) => setBatchFormData({ ...batchFormData, lokasi: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih lokasi baru" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.nama}>
+                            {loc.nama}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="batch-departemen">Departemen (opsional)</Label>
+                    <Select value={batchFormData.departemen} onValueChange={(value) => setBatchFormData({ ...batchFormData, departemen: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pilih departemen baru" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.nama}>
+                            {dept.nama}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsBatchDialogOpen(false)}>
+                      Batal
+                    </Button>
+                    <Button type="submit">
+                      Update
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
             if (!open) resetForm();
@@ -376,10 +527,55 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
         </div>
       </div>
 
+      {/* Search and Filters */}
+      <div className="flex gap-4 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Cari nama, username, atau UID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={filterLokasi} onValueChange={setFilterLokasi}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter Lokasi" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Lokasi</SelectItem>
+            {locations.map((loc) => (
+              <SelectItem key={loc.id} value={loc.nama}>
+                {loc.nama}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterDepartemen} onValueChange={setFilterDepartemen}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter Departemen" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Departemen</SelectItem>
+            {departments.map((dept) => (
+              <SelectItem key={dept.id} value={dept.nama}>
+                {dept.nama}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={filteredUsers.length > 0 && selectedUsers.size === filteredUsers.length}
+                  onCheckedChange={toggleAllUsers}
+                />
+              </TableHead>
               <TableHead>Username</TableHead>
               <TableHead>Nama Lengkap</TableHead>
               <TableHead>UID (NIK)</TableHead>
@@ -391,19 +587,25 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={7} className="text-center py-8">
                   Loading...
                 </TableCell>
               </TableRow>
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Belum ada user
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  {users.length === 0 ? "Belum ada user" : "Tidak ada user yang sesuai filter"}
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
+              filteredUsers.map((user) => (
                 <TableRow key={user.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedUsers.has(user.id)}
+                      onCheckedChange={() => toggleUserSelection(user.id)}
+                    />
+                  </TableCell>
                   <TableCell>{user.username}</TableCell>
                   <TableCell>{user.nama}</TableCell>
                   <TableCell>{user.uid}</TableCell>
