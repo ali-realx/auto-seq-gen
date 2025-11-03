@@ -170,17 +170,29 @@ const Dashboard = () => {
     doc.setFontSize(16);
     doc.text("Daftar Nomor Dokumen", 14, 15);
     
-    const tableData = filteredDocuments.map(d => [
-      d.nama,
-      d.nomor_surat,
-      d.jenis_surat,
-      d.lokasi,
-      d.departemen,
-      format(new Date(d.created_at), "dd/MM/yyyy")
-    ]);
+    const includeDescription = viewMode !== "all";
+    
+    const tableData = filteredDocuments.map(d => {
+      const row = [
+        d.nama,
+        d.nomor_surat,
+        d.jenis_surat
+      ];
+      
+      if (includeDescription) {
+        row.push(d.deskripsi || "-");
+      }
+      
+      row.push(d.lokasi, d.departemen, format(new Date(d.created_at), "dd/MM/yyyy"));
+      return row;
+    });
+    
+    const headers = includeDescription 
+      ? [["Nama", "Nomor Surat", "Jenis", "Deskripsi", "Lokasi", "Dept", "Tanggal"]]
+      : [["Nama", "Nomor Surat", "Jenis", "Lokasi", "Dept", "Tanggal"]];
     
     autoTable(doc, {
-      head: [["Nama", "Nomor Surat", "Jenis", "Lokasi", "Dept", "Tanggal"]],
+      head: headers,
       body: tableData,
       startY: 25
     });
@@ -189,15 +201,25 @@ const Dashboard = () => {
   };
 
   const exportToExcel = () => {
-    const excelData = filteredDocuments.map(d => ({
-      Nama: d.nama,
-      "Nomor Surat": d.nomor_surat,
-      "Jenis Surat": d.jenis_surat,
-      Deskripsi: d.deskripsi,
-      Lokasi: d.lokasi,
-      Departemen: d.departemen,
-      Tanggal: format(new Date(d.created_at), "dd/MM/yyyy HH:mm")
-    }));
+    const includeDescription = viewMode !== "all";
+    
+    const excelData = filteredDocuments.map(d => {
+      const row: any = {
+        Nama: d.nama,
+        "Nomor Surat": d.nomor_surat,
+        "Jenis Surat": d.jenis_surat
+      };
+      
+      if (includeDescription) {
+        row.Deskripsi = d.deskripsi || "-";
+      }
+      
+      row.Lokasi = d.lokasi;
+      row.Departemen = d.departemen;
+      row.Tanggal = format(new Date(d.created_at), "dd/MM/yyyy HH:mm");
+      
+      return row;
+    });
     
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
