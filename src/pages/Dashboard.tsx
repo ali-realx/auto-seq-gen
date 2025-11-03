@@ -167,8 +167,8 @@ const Dashboard = () => {
   const exportToPDF = () => {
     const includeDescription = viewMode !== "all";
     
-    // Use landscape if description is included or many rows
-    const orientation = includeDescription || filteredDocuments.length > 20 ? "landscape" : "portrait";
+    // Use landscape if description is included or more than 10 rows
+    const orientation = includeDescription || filteredDocuments.length > 10 ? "landscape" : "portrait";
     const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
     
     doc.setFontSize(16);
@@ -209,33 +209,41 @@ const Dashboard = () => {
       body: tableData,
       startY: filterInfo ? 28 : 25,
       styles: { 
-        fontSize: 7, 
-        cellPadding: 1.5,
+        fontSize: 8, 
+        cellPadding: 2,
         overflow: 'linebreak',
         cellWidth: 'wrap'
       },
       columnStyles: includeDescription ? {
-        0: { cellWidth: 35 },   // Nama
+        0: { cellWidth: 38 },   // Nama
         1: { cellWidth: 55 },   // Nomor Surat
-        2: { cellWidth: 28 },   // Jenis
-        3: { cellWidth: 80 },   // Deskripsi - auto wrap
-        4: { cellWidth: 28 },   // Lokasi
-        5: { cellWidth: 28 },   // Dept
-        6: { cellWidth: 23 }    // Tanggal
+        2: { cellWidth: 30 },   // Jenis
+        3: { cellWidth: 75 },   // Deskripsi
+        4: { cellWidth: 30 },   // Lokasi
+        5: { cellWidth: 30 },   // Dept
+        6: { cellWidth: 25 }    // Tanggal
+      } : orientation === "landscape" ? {
+        0: { cellWidth: 45 },   // Nama
+        1: { cellWidth: 70 },   // Nomor Surat
+        2: { cellWidth: 35 },   // Jenis
+        3: { cellWidth: 40 },   // Lokasi
+        4: { cellWidth: 40 },   // Dept
+        5: { cellWidth: 30 }    // Tanggal
       } : {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 60 },
-        2: { cellWidth: 35 },
-        3: { cellWidth: 30 },
-        4: { cellWidth: 30 },
-        5: { cellWidth: 30 }
+        0: { cellWidth: 30 },   // Nama
+        1: { cellWidth: 50 },   // Nomor Surat
+        2: { cellWidth: 25 },   // Jenis
+        3: { cellWidth: 28 },   // Lokasi
+        4: { cellWidth: 28 },   // Dept
+        5: { cellWidth: 25 }    // Tanggal
       },
       headStyles: { 
         fillColor: [59, 130, 246],
         fontSize: 8,
         fontStyle: 'bold'
       },
-      margin: { left: 10, right: 10 }
+      margin: { left: 10, right: 10 },
+      tableWidth: 'auto'
     });
     
     const filterSuffix = dateFilter !== "all" ? `-${dateFilter}` : "";
