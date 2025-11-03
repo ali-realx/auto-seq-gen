@@ -3,15 +3,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, FileDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
-import { format } from "date-fns";
+import { format, subDays, startOfWeek, startOfMonth } from "date-fns";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 interface Document {
   id: string;
@@ -35,10 +38,10 @@ const Dashboard = () => {
   const [jenisFilter, setJenisFilter] = useState<string>("all");
   const [departemenFilter, setDepartemenFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [searchCategory, setSearchCategory] = useState<string>("all");
   const [documentTypes, setDocumentTypes] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [dateFilter, setDateFilter] = useState<string>("all");
 
   // Allow public access to dashboard; no redirect
 
@@ -129,26 +132,78 @@ const Dashboard = () => {
   };
 
   const filteredDocuments = documents.filter((doc) => {
+    // Apply date filter first
+    if (dateFilter !== "all") {
+      const docDate = new Date(doc.created_at);
+      const now = new Date();
+      
+      if (dateFilter === "today") {
+        if (format(docDate, "yyyy-MM-dd") !== format(now, "yyyy-MM-dd")) return false;
+      } else if (dateFilter === "week") {
+        if (docDate < startOfWeek(now)) return false;
+      } else if (dateFilter === "month") {
+        if (docDate < startOfMonth(now)) return false;
+      }
+    }
+    
+    // Apply search filter
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     
-    if (searchCategory === "all") {
-      return (
-        doc.nama.toLowerCase().includes(query) ||
-        doc.nomor_surat.toLowerCase().includes(query) ||
-        doc.lokasi.toLowerCase().includes(query) ||
-        doc.departemen.toLowerCase().includes(query)
-      );
-    } else if (searchCategory === "nama") {
-      return doc.nama.toLowerCase().includes(query);
-    } else if (searchCategory === "nomor") {
-      return doc.nomor_surat.toLowerCase().includes(query);
-    } else if (searchCategory === "lokasi") {
-      return doc.lokasi.toLowerCase().includes(query);
+    // Search across nama, nomor_surat for everyone
+    // For logged-in users viewing their own, also search deskripsi
+    const searchFields = [
+      doc.nama.toLowerCase(),
+      doc.nomor_surat.toLowerCase()
+    ];
+    
+    if (viewMode === "own" && user) {
+      searchFields.push(doc.deskripsi?.toLowerCase() || "");
     }
     
-    return true;
+    return searchFields.some(field => field.includes(query));
   });
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(16);
+    doc.text("Daftar Nomor Dokumen", 14, 15);
+    
+    const tableData = filteredDocuments.map(d => [
+      d.nama,
+      d.nomor_surat,
+      d.jenis_surat,
+      d.lokasi,
+      d.departemen,
+      format(new Date(d.created_at), "dd/MM/yyyy")
+    ]);
+    
+    autoTable(doc, {
+      head: [["Nama", "Nomor Surat", "Jenis", "Lokasi", "Dept", "Tanggal"]],
+      body: tableData,
+      startY: 25
+    });
+    
+    doc.save(`dokumen-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+  };
+
+  const exportToExcel = () => {
+    const excelData = filteredDocuments.map(d => ({
+      Nama: d.nama,
+      "Nomor Surat": d.nomor_surat,
+      "Jenis Surat": d.jenis_surat,
+      Deskripsi: d.deskripsi,
+      Lokasi: d.lokasi,
+      Departemen: d.departemen,
+      Tanggal: format(new Date(d.created_at), "dd/MM/yyyy HH:mm")
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Dokumen");
+    XLSX.writeFile(wb, `dokumen-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  };
 
   if (loading || isLoadingDocs) {
     return (
@@ -171,10 +226,20 @@ const Dashboard = () => {
             <h2 className="text-3xl font-bold text-foreground">Dashboard</h2>
             <p className="text-muted-foreground">Daftar nomor dokumen</p>
           </div>
-          <Button onClick={() => navigate("/create-number")} size="lg">
-            <Plus className="h-5 w-5 mr-2" />
-            Buat Nomor Baru
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={exportToPDF} variant="outline" size="lg">
+              <FileDown className="h-5 w-5 mr-2" />
+              PDF
+            </Button>
+            <Button onClick={exportToExcel} variant="outline" size="lg">
+              <FileDown className="h-5 w-5 mr-2" />
+              Excel
+            </Button>
+            <Button onClick={() => navigate("/create-number")} size="lg">
+              <Plus className="h-5 w-5 mr-2" />
+              Buat Nomor Baru
+            </Button>
+          </div>
         </div>
 
         <Card className="p-6">
@@ -199,7 +264,22 @@ const Dashboard = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label className="text-sm font-semibold mb-3 block">Filter Tanggal</Label>
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih periode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua</SelectItem>
+                    <SelectItem value="today">Hari Ini</SelectItem>
+                    <SelectItem value="week">Minggu Ini</SelectItem>
+                    <SelectItem value="month">Bulan Ini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
               <div>
                 <Label className="text-sm font-semibold mb-3 block">Filter Jenis Dokumen</Label>
                 <Select value={jenisFilter} onValueChange={setJenisFilter}>
@@ -235,29 +315,13 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-1">
-                <Label className="text-sm font-semibold mb-3 block">Kategori Pencarian</Label>
-                <Select value={searchCategory} onValueChange={setSearchCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua Kategori</SelectItem>
-                    <SelectItem value="nama">Nama</SelectItem>
-                    <SelectItem value="nomor">Nomor Surat</SelectItem>
-                    <SelectItem value="lokasi">Lokasi</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="md:col-span-3">
-                <Label className="text-sm font-semibold mb-3 block">Cari</Label>
-                <Input
-                  placeholder="Cari berdasarkan kategori yang dipilih..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+            <div>
+              <Label className="text-sm font-semibold mb-3 block">Cari</Label>
+              <Input
+                placeholder={viewMode === "own" ? "Cari nama, nomor surat, atau deskripsi..." : "Cari nama atau nomor surat..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
         </Card>

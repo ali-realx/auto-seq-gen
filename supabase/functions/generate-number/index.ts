@@ -21,14 +21,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Create client with optional auth for anonymous users
+    const authHeader = req.headers.get('Authorization');
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
+      authHeader ? {
         global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
+          headers: { Authorization: authHeader },
         },
-      }
+      } : {}
     );
 
     const body: RequestBody = await req.json();

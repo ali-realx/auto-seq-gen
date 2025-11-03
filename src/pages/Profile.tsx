@@ -4,10 +4,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 export default function ProfilePage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -81,6 +84,16 @@ export default function ProfilePage() {
   return (
     <Layout>
       <div className="space-y-6 max-w-2xl">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/dashboard")}
+          className="mb-4"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Kembali
+        </Button>
+        
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Profil Saya</h2>
