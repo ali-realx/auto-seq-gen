@@ -208,15 +208,20 @@ const Dashboard = () => {
       head: headers,
       body: tableData,
       startY: filterInfo ? 28 : 25,
-      styles: { fontSize: 8, cellPadding: 2 },
+      styles: { 
+        fontSize: 7, 
+        cellPadding: 1.5,
+        overflow: 'linebreak',
+        cellWidth: 'wrap'
+      },
       columnStyles: includeDescription ? {
-        0: { cellWidth: 30 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 60 }, // Description column - wider
-        4: { cellWidth: 25 },
-        5: { cellWidth: 25 },
-        6: { cellWidth: 25 }
+        0: { cellWidth: 35 },   // Nama
+        1: { cellWidth: 55 },   // Nomor Surat
+        2: { cellWidth: 28 },   // Jenis
+        3: { cellWidth: 80 },   // Deskripsi - auto wrap
+        4: { cellWidth: 28 },   // Lokasi
+        5: { cellWidth: 28 },   // Dept
+        6: { cellWidth: 23 }    // Tanggal
       } : {
         0: { cellWidth: 40 },
         1: { cellWidth: 60 },
@@ -225,7 +230,12 @@ const Dashboard = () => {
         4: { cellWidth: 30 },
         5: { cellWidth: 30 }
       },
-      headStyles: { fillColor: [59, 130, 246] }
+      headStyles: { 
+        fillColor: [59, 130, 246],
+        fontSize: 8,
+        fontStyle: 'bold'
+      },
+      margin: { left: 10, right: 10 }
     });
     
     const filterSuffix = dateFilter !== "all" ? `-${dateFilter}` : "";
