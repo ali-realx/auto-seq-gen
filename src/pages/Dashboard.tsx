@@ -165,12 +165,25 @@ const Dashboard = () => {
   });
 
   const exportToPDF = () => {
-    const doc = new jsPDF();
+    const includeDescription = viewMode !== "all";
+    
+    // Use landscape if description is included or many rows
+    const orientation = includeDescription || filteredDocuments.length > 20 ? "landscape" : "portrait";
+    const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
     
     doc.setFontSize(16);
     doc.text("Daftar Nomor Dokumen", 14, 15);
     
-    const includeDescription = viewMode !== "all";
+    // Add filter info
+    let filterInfo = "";
+    if (dateFilter === "today") filterInfo = "Hari Ini";
+    else if (dateFilter === "week") filterInfo = "Minggu Ini";
+    else if (dateFilter === "month") filterInfo = "Bulan Ini";
+    
+    if (filterInfo) {
+      doc.setFontSize(10);
+      doc.text(`Filter: ${filterInfo}`, 14, 22);
+    }
     
     const tableData = filteredDocuments.map(d => {
       const row = [
@@ -194,10 +207,29 @@ const Dashboard = () => {
     autoTable(doc, {
       head: headers,
       body: tableData,
-      startY: 25
+      startY: filterInfo ? 28 : 25,
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: includeDescription ? {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 60 }, // Description column - wider
+        4: { cellWidth: 25 },
+        5: { cellWidth: 25 },
+        6: { cellWidth: 25 }
+      } : {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 60 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 30 },
+        5: { cellWidth: 30 }
+      },
+      headStyles: { fillColor: [59, 130, 246] }
     });
     
-    doc.save(`dokumen-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    const filterSuffix = dateFilter !== "all" ? `-${dateFilter}` : "";
+    doc.save(`dokumen-${format(new Date(), "yyyy-MM-dd")}${filterSuffix}.pdf`);
   };
 
   const exportToExcel = () => {
@@ -222,9 +254,34 @@ const Dashboard = () => {
     });
     
     const ws = XLSX.utils.json_to_sheet(excelData);
+    
+    // Set column widths
+    const colWidths = includeDescription 
+      ? [
+          { wch: 25 },  // Nama
+          { wch: 35 },  // Nomor Surat
+          { wch: 20 },  // Jenis Surat
+          { wch: 50 },  // Deskripsi - extra wide
+          { wch: 20 },  // Lokasi
+          { wch: 20 },  // Departemen
+          { wch: 18 }   // Tanggal
+        ]
+      : [
+          { wch: 25 },  // Nama
+          { wch: 35 },  // Nomor Surat
+          { wch: 20 },  // Jenis Surat
+          { wch: 20 },  // Lokasi
+          { wch: 20 },  // Departemen
+          { wch: 18 }   // Tanggal
+        ];
+    
+    ws['!cols'] = colWidths;
+    
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Dokumen");
-    XLSX.writeFile(wb, `dokumen-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    
+    const filterSuffix = dateFilter !== "all" ? `-${dateFilter}` : "";
+    XLSX.writeFile(wb, `dokumen-${format(new Date(), "yyyy-MM-dd")}${filterSuffix}.xlsx`);
   };
 
   if (loading || isLoadingDocs) {
