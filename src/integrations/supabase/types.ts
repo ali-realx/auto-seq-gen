@@ -190,12 +190,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_role_by_username: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _username: string
+        }
+        Returns: undefined
+      }
+      get_user_id_by_username: { Args: { _username: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      upsert_profile_by_username: {
+        Args: {
+          _departemen: string
+          _lokasi: string
+          _nama: string
+          _uid: string
+          _username: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

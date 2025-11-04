@@ -126,10 +126,6 @@ export default function ProfilePage() {
         </div>
 
         <div className="bg-white border rounded p-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Email</label>
-            <div className="text-foreground">{user?.email ?? "-"}</div>
-          </div>
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-muted-foreground mb-1">Nama</label>
