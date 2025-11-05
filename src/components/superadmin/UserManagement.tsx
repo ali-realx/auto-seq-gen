@@ -17,6 +17,7 @@ interface User {
   uid: string;
   departemen: string;
   lokasi: string;
+  role?: string;
 }
 
 interface UserManagementProps {
@@ -52,6 +53,7 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     uid: "",
     departemen: "",
     lokasi: "",
+    role: "user",
   });
 
   useEffect(() => {
@@ -60,9 +62,21 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
 
   const fetchUsers = async () => {
     setIsLoading(true);
-    const { data } = await supabase.from("profiles").select("*").order("nama");
+    const { data } = await supabase
+      .from("profiles")
+      .select(`
+        *,
+        user_roles(role)
+      `)
+      .order("nama");
     if (data) {
-      setUsers(data as User[]);
+      const usersWithRoles = data.map((user: any) => ({
+        ...user,
+        role: Array.isArray(user.user_roles) && user.user_roles.length > 0 
+          ? user.user_roles[0].role 
+          : "user"
+      }));
+      setUsers(usersWithRoles as User[]);
     }
     setIsLoading(false);
   };
@@ -72,7 +86,7 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     
     if (editingUser) {
       // Update existing user
-      const { error } = await supabase
+      const { error: profileError } = await supabase
         .from("profiles")
         .update({
           nama: formData.nama,
@@ -83,7 +97,7 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
         })
         .eq("id", editingUser.id);
 
-      if (error) {
+      if (profileError) {
         toast({
           variant: "destructive",
           title: "Error",
@@ -92,17 +106,54 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
         return;
       }
 
+      // Update role if changed
+      if (formData.role !== editingUser.role) {
+        await supabase.from("user_roles").delete().eq("user_id", editingUser.id);
+        
+        const validRole = formData.role === "admin" ? "user" : formData.role;
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({ user_id: editingUser.id, role: validRole as "user" | "superadmin" });
+
+        if (roleError) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Gagal mengupdate role",
+          });
+          return;
+        }
+      }
+
       toast({
         title: "Sukses",
         description: "User berhasil diupdate",
       });
     } else {
-      // Create new user via edge function
-      const { error } = await supabase.functions.invoke("create-user", {
-        body: formData,
+      // Create new user - sign up via auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: `${formData.username}@placeholder.local`,
+        password: formData.password,
+        options: {
+          data: {
+            username: formData.username,
+            nama: formData.nama,
+            lokasi: formData.lokasi,
+            departemen: formData.departemen,
+          }
+        }
       });
 
-      if (error) {
+      if (authError) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: authError.message || "Gagal membuat user",
+        });
+        return;
+      }
+
+      if (!authData.user) {
         toast({
           variant: "destructive",
           title: "Error",
@@ -110,6 +161,18 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
         });
         return;
       }
+
+      // Update profile with UID
+      await supabase
+        .from("profiles")
+        .update({ uid: formData.uid })
+        .eq("id", authData.user.id);
+
+      // Add role
+      const validRole = formData.role === "admin" ? "user" : formData.role;
+      await supabase
+        .from("user_roles")
+        .insert({ user_id: authData.user.id, role: validRole as "user" | "superadmin" });
 
       toast({
         title: "Sukses",
@@ -130,6 +193,7 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
       uid: "",
       departemen: "",
       lokasi: "",
+      role: "user",
     });
     setEditingUser(null);
   };
@@ -143,6 +207,7 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
       uid: user.uid || "",
       departemen: user.departemen,
       lokasi: user.lokasi,
+      role: user.role || "user",
     });
     setIsDialogOpen(true);
   };
@@ -150,24 +215,34 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
   const handleDelete = async (userId: string) => {
     if (!confirm("Apakah Anda yakin ingin menghapus user ini?")) return;
 
-    const { error } = await supabase.functions.invoke("delete-user", {
-      body: { userId },
-    });
+    try {
+      // Delete user roles first
+      await supabase.from("user_roles").delete().eq("user_id", userId);
+      
+      // Delete profile
+      const { error } = await supabase.from("profiles").delete().eq("id", userId);
 
-    if (error) {
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Gagal menghapus user",
+        });
+        return;
+      }
+
+      toast({
+        title: "Sukses",
+        description: "User berhasil dihapus",
+      });
+      fetchUsers();
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Gagal menghapus user",
+        description: error.message,
       });
-      return;
     }
-
-    toast({
-      title: "Sukses",
-      description: "User berhasil dihapus",
-    });
-    fetchUsers();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,7 +263,7 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
         }
 
         // basic header validation
-        const required = ["username", "password", "nama", "uid", "departemen", "lokasi"];
+        const required = ["username", "password", "nama", "uid", "departemen", "lokasi", "role"];
         const headers = Object.keys(rows[0]);
         const missing = required.filter((h) => !headers.includes(h));
         if (missing.length) {
@@ -208,36 +283,61 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
           uid: String(r.uid || "").trim(),
           departemen: String(r.departemen || "").trim(),
           lokasi: String(r.lokasi || "").trim(),
+          role: String(r.role || "user").trim(),
         }));
 
         toast({ title: "Mengimpor...", description: `Memproses ${users.length} user` });
 
         try {
-          // Prefer single batch edge function if tersedia
-          const { error: batchError } = await supabase.functions.invoke("create-users-batch", {
-            body: { users },
-          } as any);
+          let successCount = 0;
+          let failCount = 0;
 
-          if (batchError) {
-            // fallback: invoke create-user per row
-            const results = [];
-            for (const u of users) {
-              const { error } = await supabase.functions.invoke("create-user", { body: u } as any);
-              results.push({ user: u.username, ok: !error, error: error?.message });
-            }
-
-            const failed = results.filter((r) => !r.ok);
-            if (failed.length) {
-              toast({
-                variant: "destructive",
-                title: "Sebagian gagal",
-                description: `${failed.length} dari ${users.length} user gagal dibuat`,
+          for (const u of users) {
+            try {
+              // Create auth user
+              const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: `${u.username}@placeholder.local`,
+                password: u.password,
+                options: {
+                  data: {
+                    username: u.username,
+                    nama: u.nama,
+                    lokasi: u.lokasi,
+                    departemen: u.departemen,
+                  }
+                }
               });
-            } else {
-              toast({ title: "Sukses", description: "Semua user berhasil dibuat" });
+
+              if (authError) throw authError;
+              if (!authData.user) throw new Error("Failed to create user");
+
+              // Update profile with UID
+              await supabase
+                .from("profiles")
+                .update({ uid: u.uid })
+                .eq("id", authData.user.id);
+
+              // Add role
+              const validRole = u.role === "admin" ? "user" : u.role;
+              await supabase
+                .from("user_roles")
+                .insert({ user_id: authData.user.id, role: validRole as "user" | "superadmin" });
+
+              successCount++;
+            } catch (error: any) {
+              console.error(`Failed to create user ${u.username}:`, error);
+              failCount++;
             }
+          }
+
+          if (failCount > 0) {
+            toast({
+              variant: "destructive",
+              title: "Sebagian gagal",
+              description: `${failCount} dari ${users.length} user gagal dibuat`,
+            });
           } else {
-            toast({ title: "Sukses", description: "User berhasil diimpor (batch)" });
+            toast({ title: "Sukses", description: `${successCount} user berhasil dibuat` });
           }
 
           fetchUsers();
@@ -255,8 +355,8 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
   };
 
   const downloadTemplate = () => {
-    const headers = ["username", "password", "nama", "uid", "departemen", "lokasi"];
-    const csvContent = headers.join(",") + "\n" + "user1,Pass123,Nama User,12345,Departemen,Lokasi";
+    const headers = ["username", "password", "nama", "uid", "departemen", "lokasi", "role"];
+    const csvContent = headers.join(",") + "\n" + "user1,Pass123,Nama User,12345,Departemen,Lokasi,user";
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -513,6 +613,19 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="superadmin">Superadmin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Batal
@@ -581,19 +694,20 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
               <TableHead>UID (NIK)</TableHead>
               <TableHead>Departemen</TableHead>
               <TableHead>Lokasi</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   {users.length === 0 ? "Belum ada user" : "Tidak ada user yang sesuai filter"}
                 </TableCell>
               </TableRow>
@@ -611,6 +725,15 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
                   <TableCell>{user.uid}</TableCell>
                   <TableCell>{user.departemen}</TableCell>
                   <TableCell>{user.lokasi}</TableCell>
+                  <TableCell>
+                    <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                      user.role === 'superadmin' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100' :
+                      user.role === 'admin' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100' :
+                      'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                    }`}>
+                      {user.role || 'user'}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
                       <Pencil className="h-4 w-4" />
