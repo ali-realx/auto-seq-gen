@@ -65,13 +65,23 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     const { data } = await supabase
       .from("profiles")
       .select(`
-        *,
+        id,
+        username,
+        nama,
+        uid,
+        departemen,
+        lokasi,
         user_roles(role)
       `)
       .order("nama");
     if (data) {
       const usersWithRoles = data.map((user: any) => ({
-        ...user,
+        id: user.id,
+        username: user.username,
+        nama: user.nama,
+        uid: user.uid,
+        departemen: user.departemen,
+        lokasi: user.lokasi,
         role: Array.isArray(user.user_roles) && user.user_roles.length > 0 
           ? user.user_roles[0].role 
           : "user"
