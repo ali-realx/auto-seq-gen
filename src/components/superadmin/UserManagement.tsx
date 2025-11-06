@@ -7,9 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Plus, Download, Upload, Search, Edit, FileSpreadsheet } from "lucide-react";
+import { Pencil, Trash2, Plus, Download, Upload, Search, Edit, FileSpreadsheet, Key } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface User {
   id: string;
@@ -43,6 +44,12 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     lokasi: "",
     departemen: "",
   });
+
+  // Password reset state
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordResetUser, setPasswordResetUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // ref for hidden file input
   let fileInputRef: HTMLInputElement | null = null;
@@ -278,6 +285,69 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
         description: "User berhasil dihapus",
       });
       fetchUsers();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  const handlePasswordReset = (user: User) => {
+    setPasswordResetUser(user);
+    setNewPassword("");
+    setConfirmPassword("");
+    setIsPasswordDialogOpen(true);
+  };
+
+  const handlePasswordResetSubmit = async () => {
+    if (!passwordResetUser) return;
+
+    if (newPassword.length < 6) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Password minimal 6 karakter",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Password dan konfirmasi password tidak cocok",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.functions.invoke("update-user-password", {
+        body: {
+          user_id: passwordResetUser.id,
+          new_password: newPassword,
+        },
+      });
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message || "Gagal mereset password",
+        });
+        return;
+      }
+
+      toast({
+        title: "Sukses",
+        description: `Password untuk ${passwordResetUser.nama} berhasil direset`,
+      });
+
+      setIsPasswordDialogOpen(false);
+      setPasswordResetUser(null);
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -824,6 +894,14 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => handlePasswordReset(user)}
+                      title="Reset Password"
+                    >
+                      <Key className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -837,6 +915,53 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
           </TableBody>
         </Table>
       </div>
+
+      {/* Password Reset Dialog */}
+      <AlertDialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Password User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Reset password untuk: <strong>{passwordResetUser?.nama}</strong> ({passwordResetUser?.username})
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="new-password">Password Baru</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="Minimal 6 karakter"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirm-password">Konfirmasi Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Ketik ulang password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setIsPasswordDialogOpen(false);
+              setPasswordResetUser(null);
+              setNewPassword("");
+              setConfirmPassword("");
+            }}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handlePasswordResetSubmit}>
+              Reset Password
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
