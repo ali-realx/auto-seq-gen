@@ -63,33 +63,64 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
 
   const fetchUsers = async () => {
     setIsLoading(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select(`
-        id,
-        username,
-        nama,
-        uid,
-        departemen,
-        lokasi,
-        user_roles(role)
-      `)
-      .order("nama");
-    if (data) {
-      const usersWithRoles = data.map((user: any) => ({
-        id: user.id,
-        username: user.username,
-        nama: user.nama,
-        uid: user.uid,
-        departemen: user.departemen,
-        lokasi: user.lokasi,
-        role: Array.isArray(user.user_roles) && user.user_roles.length > 0 
-          ? user.user_roles[0].role 
-          : "user"
-      }));
+    try {
+      // Fetch profiles first
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, username, nama, uid, departemen, lokasi")
+        .order("nama");
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Gagal mengambil data user: " + profilesError.message,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!profilesData || profilesData.length === 0) {
+        setUsers([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch user roles separately
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+
+      if (rolesError) {
+        console.error("Error fetching roles:", rolesError);
+      }
+
+      // Combine profiles with their roles
+      const usersWithRoles = profilesData.map((profile: any) => {
+        const userRole = rolesData?.find((r: any) => r.user_id === profile.id);
+        return {
+          id: profile.id,
+          username: profile.username || "",
+          nama: profile.nama || "",
+          uid: profile.uid || "",
+          departemen: profile.departemen || "",
+          lokasi: profile.lokasi || "",
+          role: userRole?.role || "user"
+        };
+      });
+
       setUsers(usersWithRoles as User[]);
+    } catch (error: any) {
+      console.error("Unexpected error in fetchUsers:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Terjadi kesalahan: " + error.message,
+      });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
