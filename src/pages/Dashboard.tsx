@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Plus, FileDown } from "lucide-react";
+import { Plus, FileDown, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
@@ -32,6 +33,7 @@ type ViewMode = "own" | "department" | "all";
 const Dashboard = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [viewMode, setViewMode] = useState<"own" | "department" | "all">("all");
@@ -302,6 +304,35 @@ const Dashboard = () => {
     XLSX.writeFile(wb, `dokumen-${format(new Date(), "yyyy-MM-dd")}${filterSuffix}.xlsx`);
   };
 
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus nomor ini?")) return;
+
+    try {
+      const { error } = await supabase.from("documents").delete().eq("id", docId);
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Gagal menghapus nomor",
+        });
+        return;
+      }
+
+      toast({
+        title: "Sukses",
+        description: "Nomor berhasil dihapus",
+      });
+      fetchDocuments();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
   if (loading || isLoadingDocs) {
     return (
       <Layout>
@@ -435,18 +466,19 @@ const Dashboard = () => {
                   <TableHead className="font-semibold">Lokasi</TableHead>
                   <TableHead className="font-semibold">Departemen</TableHead>
                   <TableHead className="font-semibold">Tanggal</TableHead>
+                  {viewMode === "own" && <TableHead className="font-semibold text-right">Aksi</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoadingDocs ? (
                   <TableRow>
-                    <TableCell colSpan={viewMode !== "all" ? 7 : 6} className="text-center py-8">
+                    <TableCell colSpan={viewMode === "own" ? 8 : viewMode !== "all" ? 7 : 6} className="text-center py-8">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : filteredDocuments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={viewMode !== "all" ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={viewMode === "own" ? 8 : viewMode !== "all" ? 7 : 6} className="text-center py-8 text-muted-foreground">
                       Belum ada nomor dokumen. Klik "Buat Nomor Baru" untuk memulai.
                     </TableCell>
                   </TableRow>
@@ -464,6 +496,18 @@ const Dashboard = () => {
                       <TableCell>
                         {format(new Date(doc.created_at), "dd/MM/yyyy HH:mm")}
                       </TableCell>
+                      {viewMode === "own" && (
+                        <TableCell className="text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}

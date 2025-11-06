@@ -7,8 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Trash2, Plus, Download, Upload, Search, Edit } from "lucide-react";
+import { Pencil, Trash2, Plus, Download, Upload, Search, Edit, FileSpreadsheet } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import * as XLSX from "xlsx";
 
 interface User {
   id: string;
@@ -375,6 +376,45 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
     a.click();
   };
 
+  const exportUsersToCSV = () => {
+    const headers = ["username", "nama", "uid", "departemen", "lokasi", "role"];
+    const rows = filteredUsers.map(u => [u.username, u.nama, u.uid, u.departemen, u.lokasi, u.role || "user"]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    toast({ title: "Sukses", description: "Data user berhasil diexport ke CSV" });
+  };
+
+  const exportUsersToExcel = () => {
+    const excelData = filteredUsers.map(u => ({
+      Username: u.username,
+      "Nama Lengkap": u.nama,
+      "UID (NIK)": u.uid,
+      Departemen: u.departemen,
+      Lokasi: u.lokasi,
+      Role: u.role || "user"
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    ws['!cols'] = [
+      { wch: 20 },  // Username
+      { wch: 30 },  // Nama
+      { wch: 15 },  // UID
+      { wch: 20 },  // Departemen
+      { wch: 20 },  // Lokasi
+      { wch: 12 }   // Role
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Users");
+    XLSX.writeFile(wb, `users-export-${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast({ title: "Sukses", description: "Data user berhasil diexport ke Excel" });
+  };
+
   // Filter users based on search and filters
   const filteredUsers = users.filter((user) => {
     const matchesSearch = user.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -461,6 +501,14 @@ export const UserManagement = ({ locations, departments }: UserManagementProps) 
       <div className="flex justify-between items-center flex-wrap gap-4">
         <h3 className="text-lg font-semibold">Manajemen User</h3>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={exportUsersToCSV}>
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportUsersToExcel}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Export Excel
+          </Button>
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download className="h-4 w-4 mr-2" />
             Download Template
